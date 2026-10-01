@@ -95,10 +95,10 @@ fi
 alias update='sudo apt update && sudo apt upgrade -y'
 alias clean='sudo apt autoremove --purge -y'
 alias restart-net='sudo systemctl restart NetworkManager'
-alias install = 'sudo apt install'
-alias r = 'reboot'
-alias q = 'exit'
-alias c = 'clear'
+alias install='sudo apt install'
+alias r='reboot'
+alias q='exit'
+alias c='clear'
 
 
 # Navigation and file aliases
@@ -116,7 +116,7 @@ alias hist='hstr'
 alias tm='tmux'
 alias tma='tmux attach -t'
 alias tml='tmux list-sessions'
-alias fetch = 'fastfetch'
+alias fetch='fastfetch'
 
 # Git aliases
 alias gs='git status'
@@ -127,7 +127,7 @@ alias gpl='git pull'
 alias gd='git diff'
 alias gb='git branch'
 alias gsw='git swtich'
-alias gl= 'git log --graph'
+alias gl='git log --graph'
 # ==========================================
 # KEYBOARD SHORTCUTS
 # ==========================================
@@ -162,3 +162,38 @@ eval "$(starship init bash)"
 
 export PATH="$HOME/.npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
+
+# ==========================================
+# FASTFETCH RANDOMIZER (kitty por defecto)
+# ==========================================
+# Toma pngs/gifs/ascii/videos de utils/ y los muestra en kitty
+# vía protocolo kitty de fastfetch. Se activa con cada `fastfetch`.
+
+export FF_UTILS_DIR="$HOME/shell-workflow/utils"
+export FF_RANDOMIZER="$HOME/shell-workflow/randomizer.sh"
+
+# Fallback si el repo está en otra ruta (ej. checkout distinto)
+if [ ! -x "$FF_RANDOMIZER" ]; then
+    if [ -x "$(dirname "${BASH_SOURCE[0]:-$HOME/.bashrc}")/randomizer.sh" ]; then
+        export FF_RANDOMIZER="$(dirname "${BASH_SOURCE[0]:-$HOME/.bashrc}")/randomizer.sh"
+    fi
+    _REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$HOME/.bashrc}")" 2>/dev/null && pwd)"
+    if [ -x "$_REPO_DIR/randomizer.sh" ]; then
+        export FF_RANDOMIZER="$_REPO_DIR/randomizer.sh"
+    fi
+    unset _REPO_DIR
+    # utils junto al randomizer tiene prioridad si existe
+    _FF_DIR="$(dirname "$FF_RANDOMIZER" 2>/dev/null)"
+    if [ -d "$_FF_DIR/utils" ]; then
+        export FF_UTILS_DIR="$_FF_DIR/utils"
+    fi
+    unset _FF_DIR
+fi
+
+# Wrapper: cada `fastfetch`, `ff` o `fetch` pasa por el randomizer.
+# Dentro de randomizer.sh se usa `command fastfetch` para no recursar.
+if [ -x "$FF_RANDOMIZER" ]; then
+    fastfetch() { bash "$FF_RANDOMIZER" "$@"; }
+    ff() { bash "$FF_RANDOMIZER" "$@"; }
+    fetch() { bash "$FF_RANDOMIZER" "$@"; }
+fi
