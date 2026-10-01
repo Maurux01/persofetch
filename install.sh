@@ -7,17 +7,24 @@
 #   1. Pregunta si quieres instalar herramientas (tools.sh).
 #      - Si SÍ   -> corre tools.sh y luego copia configs.
 #      - Si NO   -> solo copia/pega configs a sus rutas default.
-#   2. Copia tmux / starship / kitty / fastfetch a donde deben ir.
+#   2. Copia y reemplaza CADA archivo de tmux / starship / kitty / fastfetch
+#      a donde debe ir (modos copiar + reemplazar).
 #      - Si la carpeta/archivo default no existe -> la crea.
 #      - Si ya existe -> pregunta si deseas sobreescribirlo.
 #        Respuestas: s = sobreescribir, n = saltar ese archivo,
 #                    c = cancelar TODO y salir.
+#      - Con --yes se sobreescribe todo sin preguntar.
 #   3. fastfetch (caso especial):
 #      a) genera la config default con su propio comando
 #         (`fastfetch --gen-config`),
-#      b) la reemplaza con la config de este repo,
+#      b) copia y reemplaza CADA archivo de fastfetch/ del repo
+#         a ~/.config/fastfetch/ (config.jsonc, etc.),
 #      c) mete `utils/` dentro de `~/.config/fastfetch/utils`
 #         para que fastfetch/randomizer los lea desde ahí.
+#   4. .bashrc (reemplazo total):
+#      - Copia y reemplaza ~/.bashrc (carpeta raíz del usuario en Linux,
+#        $HOME) con el .bashrc que está en la carpeta shell-workflow
+#        (este repo). Hace backup del anterior a ~/.bashrc.bak.
 #
 # Uso:
 #   ./install.sh
@@ -187,6 +194,27 @@ copy_dir_contents() {
     fi
 }
 
+# Copia y reemplaza CADA archivo (top-level, incluye dotfiles) de
+# <src_dir> a <dest_dir>, manteniendo el mismo nombre.
+# copy_all_files <src_dir> <dest_dir>
+copy_all_files() {
+    local src_dir="$1" dest_dir="$2" f base
+    if [[ ! -d "$src_dir" ]]; then
+        log_warn "Origen no encontrado, salto: $src_dir"
+        return 0
+    fi
+    mkdir -p "$dest_dir" || { log_error "No pude crear $dest_dir"; return 1; }
+    local count=0
+    for f in "$src_dir"/* "$src_dir"/.*; do
+        [[ -e "$f" ]] || continue
+        base="$(basename "$f")"
+        [[ "$base" == "." || "$base" == ".." ]] && continue
+        [[ -f "$f" ]] || { log_info "Salto (no es archivo): $f"; continue; }
+        copy_file "$f" "$dest_dir/$base"
+        ((count++)) || true
+    done
+    (( count == 0 )) && log_warn "No había archivos para copiar en: $src_dir"
+}
 # ── Paso 1: ¿instalar herramientas? ──────────────────────────
 maybe_run_tools() {
     wants_module "tools" || { log_info "--only: salto tools.sh"; return 0; }
@@ -216,8 +244,10 @@ maybe_run_tools() {
 # ── Paso 2: módulos simples ──────────────────────────────────
 install_tmux() {
     wants_module "tmux" || return 0
-    log_info "== tmux =="
-    copy_file "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
+    log_info "== tmux (copiar y reemplazar cada archivo a \$HOME) =="
+    # Cada archivo de tmux/ -> $HOME con el mismo nombre
+    # (.tmux.conf -> ~/.tmux.conf, etc.)
+    copy_all_files "$REPO_DIR/tmux" "$HOME"
 }
 
 install_starship() {
@@ -265,8 +295,10 @@ install_fastfetch() {
         log_warn "fastfetch no está instalado (corre con --with-tools para instalarlo). Se copiará la config igual."
     fi
 
-    # 3.b Reemplazar con la config de este repo (pregunta si ya existe y difiere)
-    copy_file "$repo_cfg" "$dest_cfg"
+    # 3.b Copiar y reemplazar CADA archivo de fastfetch/ del repo
+    #     a ~/.config/fastfetch/ (config.jsonc y los que haya).
+    #     Pregunta si ya existe y difiere (vía copy_file).
+    copy_all_files "$REPO_DIR/fastfetch" "$dest_dir"
 
     # 3.c Meter utils/ dentro de la carpeta fastfetch del equipo
     #     para que fastfetch/randomizer los lea desde ahí.
@@ -296,48 +328,24 @@ install_randomizer() {
 
 install_bashrc() {
     wants_module "bashrc" || return 0
-    log_info "== bashrc (wrapper fastfetch) =="
+    log_info "== bashrc (copiar y reemplazar ~/.bashrc con el del repo) =="
+    local src="$REPO_DIR/.bashrc"
     local rc="$HOME/.bashrc"
-    local marker="FASTFETCH RANDOMIZER"
-    if [[ ! -f "$rc" ]]; then
-        log_info "$rc no existe, se creará."
-        touch "$rc" || { log_error "No pude crear $rc"; return 1; }
-    fi
-    if grep -q "$marker" "$rc" 2>/dev/null; then
-        log_info "El bloque $marker ya está en $rc, salto."
+    if [[ ! -f "$src" ]]; then
+        log_warn "Origen no encontrado, salto: $src"
         return 0
     fi
-    # Si el .bashrc del repo trae el bloque, lo reutilizamos; si no, plantilla mínima.
-    local block=""
-    if grep -q "$marker" "$REPO_DIR/.bashrc" 2>/dev/null; then
-        block="$(sed -n "/$marker/,\$p" "$REPO_DIR/.bashrc")"
+    if [[ -f "$rc" ]] && ! cmp -s "$src" "$rc"; then
+        # Backup del .bashrc anterior antes de reemplazar
+        local bak="$HOME/.bashrc.bak"
+        cp -f "$rc" "$bak" 2>/dev/null \
+            && log_info "Backup del .bashrc anterior en: $bak" \
+            || log_warn "No pude crear backup en $bak, sigo igual."
     fi
-    if [[ -z "$block" ]]; then
-        block=$(cat <<'EOF'
-
-# ==========================================
-# FASTFETCH RANDOMIZER (kitty por defecto)
-# ==========================================
-export FF_UTILS_DIR="$HOME/.config/fastfetch/utils"
-export FF_RANDOMIZER="$HOME/shell-workflow/randomizer.sh"
-if [ ! -x "$FF_RANDOMIZER" ] && [ -x "$HOME/.local/bin/ff-random" ]; then
-    export FF_RANDOMIZER="$HOME/.local/bin/ff-random"
-fi
-if [ -x "$FF_RANDOMIZER" ]; then
-    fastfetch() { bash "$FF_RANDOMIZER" "$@"; }
-    ff() { bash "$FF_RANDOMIZER" "$@"; }
-    fetch() { bash "$FF_RANDOMIZER" "$@"; }
-fi
-EOF
-)
-    fi
-    echo ""
-    echo "Se añadirá el bloque FASTFETCH RANDOMIZER a $rc."
-    if (( AUTO_YES )) || ask_yes_no "  ¿Añadir wrapper de fastfetch a $rc?" "y"; then
-        printf '\n%s\n' "$block" >> "$rc" && log_success "Bloque añadido a $rc. Recarga con: source $rc"
-    else
-        log_info "Saltado (no): bloque bashrc."
-    fi
+    # Copia y reemplaza: shell-workflow/.bashrc -> ~/.bashrc
+    # (carpeta raíz del usuario en Linux = $HOME).
+    # copy_file ya crea, compara, pregunta s/n/c o sobreescribe con --yes.
+    copy_file "$src" "$rc"
 }
 
 # ── Main ─────────────────────────────────────────────────────
