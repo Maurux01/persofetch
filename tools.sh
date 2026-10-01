@@ -73,7 +73,6 @@ install_core_tools() {
             python3-rich \
             figlet \
             lolcat \
-            aafire \
             bash-completion
         
         log_warn "Some tools (yazi, spotify-player, rmpc, termusic, kew) are not in default Debian repos."
@@ -95,7 +94,6 @@ install_core_tools() {
             python-rich \
             figlet \
             lolcat \
-            aafire \
             bash-completion
     fi
 }
@@ -110,8 +108,7 @@ install_ascii_tools() {
             figlet \
             toilet \
             lolcat \
-            aafire \
-            asciiquarium 2>/dev/null || true
+	    asciiquarium 2>/dev/null || true
         
         # Install pipes.sh from source
         if [ ! -f /usr/local/bin/pipes.sh ]; then
@@ -144,7 +141,6 @@ install_ascii_tools() {
             figlet \
             toilet \
             lolcat \
-            aafire \
             asciiquarium \
             pipes.sh \
             cbonsai
@@ -307,7 +303,7 @@ main() {
     echo ""
     echo "Installed tools:"
     echo "  Core: fzf, starship, timg, tmux, mpd, playerctl, 7zip, gh, hstr"
-    echo "  ASCII: cmatrix, pipes.sh, cbonsai, figlet, lolcat, aafire, asciiquarium"
+    echo "  ASCII: cmatrix, pipes.sh, cbonsai, figlet, lolcat,  asciiquarium"
     echo "  Rust: yazi, spotify-player, rmpc, termusic"
     echo "  C: kew"
     echo "  Other: TPM, fastfetch, bash-completion"
