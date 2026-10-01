@@ -95,11 +95,16 @@ fi
 alias update='sudo apt update && sudo apt upgrade -y'
 alias clean='sudo apt autoremove --purge -y'
 alias restart-net='sudo systemctl restart NetworkManager'
+alias install = 'sudo apt install'
+alias r = 'reboot'
+alias q = 'exit'
+alias c = 'clear'
+
 
 # Navigation and file aliases
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
+alias l='ls -la --color=auto'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias mkdir='mkdir -p'
@@ -111,15 +116,18 @@ alias hist='hstr'
 alias tm='tmux'
 alias tma='tmux attach -t'
 alias tml='tmux list-sessions'
+alias fetch = 'fastfetch'
 
 # Git aliases
 alias gs='git status'
-alias ga='git add'
-alias gc='git commit'
+alias ga='git add .'
+alias gc='git commit -m'
 alias gp='git push'
-alias gl='git pull'
+alias gpl='git pull'
 alias gd='git diff'
-
+alias gb='git branch'
+alias gsw='git swtich'
+alias gl= 'git log --graph'
 # ==========================================
 # KEYBOARD SHORTCUTS
 # ==========================================
