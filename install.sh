@@ -46,7 +46,7 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd)"
 AUTO_YES=0
 WITH_TOOLS=""   # "" = preguntar, "yes"/"no" = forzado
-ONLY=""         # "" = todo, o lista separada por comas: tmux,starship,kitty,fastfetch,bashrc,randomizer
+ONLY=""         # "" = todo, o lista separada por comas: tmux,starship,kitty,cava,fastfetch,bashrc,randomizer
 CANCELLED=0
 
 usage() {
@@ -263,6 +263,13 @@ install_kitty() {
     copy_file "$REPO_DIR/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"
 }
 
+install_cava() {
+    wants_module "cava" || return 0
+    log_info "== cava =="
+    # Ruta default de cava: ~/.config/cava/config
+    copy_file "$REPO_DIR/cava/config" "$HOME/.config/cava/config"
+}
+
 # ── Paso 3: fastfetch (gen default -> reemplazo -> utils) ────
 install_fastfetch() {
     wants_module "fastfetch" || return 0
@@ -363,6 +370,8 @@ main() {
     install_starship
     echo ""
     install_kitty
+    echo ""
+    install_cava
     echo ""
     install_fastfetch
     echo ""

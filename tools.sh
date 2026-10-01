@@ -258,6 +258,66 @@ install_fastfetch() {
     fi
 }
 
+# Install best Nerd Font: JetBrainsMono Nerd Font
+# - La mejor para terminal/dev: legible, ligaduras, iconos perfectos
+#   para starship/tmux/fastfetch/kitty.
+# - Idempotente: si ya existe en fc-list, salta.
+# - Instalación a nivel usuario: ~/.local/share/fonts (sin sudo,
+#   funciona en Debian/Arch/Kali/WSL).
+install_nerdfonts() {
+    local font_name="JetBrainsMono"
+    local font_dir="$HOME/.local/share/fonts/$font_name"
+    local url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
+    local tmp_zip="/tmp/${font_name}.zip"
+
+    log_info "Checking Nerd Font ($font_name)..."
+
+    if fc-list 2>/dev/null | grep -qi "${font_name}.*Nerd"; then
+        log_info "Nerd Font $font_name ya instalada, salto."
+        return 0
+    fi
+
+    # Deps mínimas para descargar/descomprimir/cachear fuentes
+    if ! command -v unzip &> /dev/null || ! command -v fc-cache &> /dev/null || ! command -v curl &> /dev/null; then
+        log_info "Instalando dependencias de fuentes (unzip, fontconfig, curl)..."
+        if [ "$OS" = "debian" ]; then
+            sudo apt install -y unzip fontconfig curl \
+                || log_warn "Deps de fuentes fallaron, intento seguir igual."
+        elif [ "$OS" = "arch" ]; then
+            sudo pacman -S --noconfirm unzip fontconfig curl \
+                || log_warn "Deps de fuentes fallaron, intento seguir igual."
+        fi
+    fi
+
+    mkdir -p "$font_dir" || { log_error "No pude crear $font_dir"; return 1; }
+
+    log_info "Descargando $font_name Nerd Font (latest)..."
+    rm -f "$tmp_zip"
+    if ! curl -fLo "$tmp_zip" --retry 3 "$url"; then
+        log_error "No se pudo descargar $url"
+        return 1
+    fi
+
+    log_info "Instalando en $font_dir ..."
+    if ! unzip -o -q "$tmp_zip" -d "$font_dir"; then
+        log_error "No se pudo descomprimir $tmp_zip"
+        rm -f "$tmp_zip"
+        return 1
+    fi
+    rm -f "$tmp_zip"
+
+    log_info "Regenerando caché de fuentes (fc-cache)..."
+    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 \
+        || fc-cache -f >/dev/null 2>&1 \
+        || log_warn "fc-cache falló, la fuente igual quedó copiada."
+
+    if fc-list 2>/dev/null | grep -qi "${font_name}.*Nerd"; then
+        log_success "Nerd Font $font_name instalada en $font_dir"
+    else
+        log_warn "Copiada en $font_dir pero fc-list aún no la ve (reabre la terminal o corre: fc-cache -fv)."
+    fi
+}
+
 # Setup bash autocomplete
 setup_autocomplete() {
     log_info "Setting up bash autocomplete..."
@@ -297,6 +357,79 @@ setup_autocomplete() {
     log_success "Bash autocomplete configured in $SHELL_RC"
 }
 
+# Install kitty (terminal por defecto de shell-workflow)
+install_kitty() {
+    if command -v kitty &> /dev/null; then
+        log_info "kitty ya instalado, salto."
+        return 0
+    fi
+    log_info "Installing kitty..."
+    if [ "$OS" = "debian" ]; then
+        sudo apt install -y kitty \
+            && log_success "kitty installed" \
+            || log_warn "kitty falló, se omite."
+    elif [ "$OS" = "arch" ]; then
+        sudo pacman -S --noconfirm kitty \
+            && log_success "kitty installed" \
+            || log_warn "kitty falló, se omite."
+    fi
+}
+
+# Install cava (visualizador de audio para la terminal)
+install_cava() {
+    if command -v cava &> /dev/null; then
+        log_info "cava ya instalado, salto."
+        return 0
+    fi
+    log_info "Installing cava..."
+    if [ "$OS" = "debian" ]; then
+        sudo apt install -y cava \
+            && log_success "cava installed" \
+            || log_warn "cava falló, se omite."
+    elif [ "$OS" = "arch" ]; then
+        sudo pacman -S --noconfirm cava \
+            && log_success "cava installed" \
+            || log_warn "cava falló, se omite."
+    fi
+}
+
+# Install chafa (imagen -> texto: logos png/gif de fastfetch en cualquier terminal)
+install_chafa() {
+    if command -v chafa &> /dev/null; then
+        log_info "chafa ya instalado, salto."
+        return 0
+    fi
+    log_info "Installing chafa..."
+    if [ "$OS" = "debian" ]; then
+        sudo apt install -y chafa \
+            && log_success "chafa installed" \
+            || log_warn "chafa falló, se omite."
+    elif [ "$OS" = "arch" ]; then
+        sudo pacman -S --noconfirm chafa \
+            && log_success "chafa installed" \
+            || log_warn "chafa falló, se omite."
+    fi
+}
+
+# Set kitty como terminal por defecto del sistema (x-terminal-emulator).
+# El `export TERMINAL="kitty"` va en el .bashrc del repo (install.sh lo copia).
+set_default_terminal() {
+    if ! command -v kitty &> /dev/null; then
+        log_warn "kitty no instalado, no puedo ponerlo por defecto."
+        return 0
+    fi
+    if command -v update-alternatives &> /dev/null; then
+        sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/bin/kitty 50 >/dev/null 2>&1 || true
+        if sudo update-alternatives --set x-terminal-emulator /usr/bin/kitty >/dev/null 2>&1; then
+            log_success "kitty como x-terminal-emulator por defecto"
+        else
+            log_warn "No se pudo fijar x-terminal-emulator (¿sin sudo?)."
+        fi
+    else
+        log_warn "Sin update-alternatives, solo queda export TERMINAL=kitty."
+    fi
+}
+
 # Setup starship prompt
 setup_starship() {
     log_info "Setting up starship prompt..."
@@ -330,6 +463,11 @@ main() {
     install_kew
     install_tpm
     install_fastfetch
+    install_nerdfonts
+    install_kitty
+    install_cava
+    install_chafa
+    set_default_terminal
     setup_autocomplete
     setup_starship
     
@@ -343,7 +481,8 @@ main() {
     echo "  ASCII: cmatrix, pipes.sh, cbonsai, figlet, lolcat,  asciiquarium"
     echo "  Rust: yazi, spotify-player, rmpc, termusic"
     echo "  C: kew"
-    echo "  Other: TPM, fastfetch, bash-completion"
+    echo "  Terminal: kitty (por defecto, TERMINAL=kitty), cava, chafa"
+    echo "  Other: TPM, fastfetch, bash-completion, JetBrainsMono Nerd Font"
     echo ""
     echo "Next steps:"
     echo "  1. Restart your terminal or run: source ~/.bashrc"

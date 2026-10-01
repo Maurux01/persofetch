@@ -160,14 +160,18 @@ eval "$(starship init bash)"
 # ENVIRONMENT
 # ==========================================
 
+# Terminal por defecto del workflow
+export TERMINAL="kitty"
+
 export PATH="$HOME/.npm-global/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 
 # ==========================================
-# FASTFETCH RANDOMIZER (kitty por defecto)
+# FASTFETCH RANDOMIZER (kitty > chafa > ascii)
 # ==========================================
-# Toma pngs/gifs/ascii/videos de utils/ y los muestra en kitty
-# vía protocolo kitty de fastfetch. Se activa con cada `fastfetch`.
+# Toma pngs/gifs/ascii/videos de utils/ y los muestra con fastfetch:
+# kitty con gráficos -> protocolo kitty; terminal normal + chafa -> color;
+# sin gráficos -> ASCII. Se activa con cada `fastfetch`.
 
 export FF_UTILS_DIR="$HOME/shell-workflow/utils"
 export FF_RANDOMIZER="$HOME/shell-workflow/randomizer.sh"

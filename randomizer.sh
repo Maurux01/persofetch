@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# ff-random — fastfetch randomizer para kitty (png / gif / video / ascii)
+# ff-random — fastfetch randomizer (png / gif / video / ascii)
 # Cada invocación elige un archivo aleatorio de utils/ y lo muestra con fastfetch.
+# kitty con gráficos -> protocolo kitty; terminal normal + chafa -> arte a color;
+# sin gráficos -> ASCII (logo-type file, nunca basura binaria).
 # Uso: randomizer.sh [args extra de fastfetch]
 # Si se pasa --logo / --logo-type explícito, se respeta y no se aleatoriza.
 
@@ -30,6 +32,66 @@ if [[ -z "$UTILS_BASE" ]]; then
     exit $?
 fi
 
+# ──1b. Capacidades gráficas del terminal ───────────────────────
+# kitty: protocolo gráfico kitty (KITTY_WINDOW_ID o TERM=*-kitty*).
+# chafa: imagen -> texto a color en CUALQUIER terminal (apt install chafa).
+# Sin ninguno: solo ASCII (logo-type file), png/gif saldrían como basura.
+HAS_KITTY=0
+[[ -n "${KITTY_WINDOW_ID:-}" || "${TERM:-}" == *kitty* ]] && HAS_KITTY=1
+HAS_CHAFA=0
+command -v chafa >/dev/null 2>&1 && HAS_CHAFA=1
+
+_logo_type_for() { # $1 = extensión (cualquier mayúsculas)
+    local e="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+    case "$e" in
+        txt|ascii) printf 'file' ;;
+        *)
+            if (( HAS_KITTY )); then printf 'kitty'
+            elif (( HAS_CHAFA )); then printf 'chafa'
+            else printf 'file'
+            fi ;;
+    esac
+}
+
+# Pre-render con chafa CLI a texto (cacheado).
+# El fastfetch de Debian no trae soporte chafa compilado (--logo-type chafa
+# cae al logo builtin), así que convertimos png/gif/jpg a arte ANSI y lo
+# mostramos con --logo-type file. El cache evita re-renderizar cada fetch.
+CHAFA_CACHE="${TMPDIR:-/tmp}/ff-random-chafa"
+_chafa_render() { # $1 = imagen -> imprime ruta del txt cacheado o falla
+    local src="$1" key cache
+    command -v chafa >/dev/null 2>&1 || return 1
+    command -v md5sum >/dev/null 2>&1 || return 1
+    mkdir -p "$CHAFA_CACHE" 2>/dev/null || return 1
+    key="$(printf '%s' "$src" | md5sum | cut -d' ' -f1)"
+    cache="$CHAFA_CACHE/$key.txt"
+    if [[ ! -s "$cache" || "$src" -nt "$cache" ]]; then
+        if ! chafa --format symbols --symbols block --colors full --animate off --size 36x18 "$src" >"$cache" 2>/dev/null; then
+            chafa --format symbols --symbols block --colors full --size 36x18 "$src" >"$cache" 2>/dev/null || return 1
+        fi
+        [[ -s "$cache" ]] || return 1
+    fi
+    printf '%s' "$cache"
+}
+
+# Fija LOGO_SOURCE/LOGO_TYPE para una ruta elegida, con chafa si aplica.
+_apply_logo() { # $1 = ruta elegida
+    local e="$(printf '%s' "${1##*.}" | tr '[:upper:]' '[:lower:]')"
+    LOGO_SOURCE="$1"
+    LOGO_TYPE="$(_logo_type_for "$e")"
+    if (( ! HAS_KITTY )) && (( HAS_CHAFA )); then
+        case "$e" in
+            png|jpg|jpeg|webp|gif)
+                local r
+                if r="$(_chafa_render "$1")"; then
+                    LOGO_SOURCE="$r"
+                    LOGO_TYPE="file"
+                fi
+                ;;
+        esac
+    fi
+}
+
 # ──2. Config base ─────────────────────────────────────────────
 FF_BIN="$(command -v fastfetch)"
 BASE_CONFIG=""
@@ -54,6 +116,11 @@ TXTS=("$UTILS_BASE"/ASCII/*.txt "$UTILS_BASE"/ascii/*.txt)
 # Compat: estructura vieja ~/.config/fastfetch/logos/[0-9]*.png
 LEGACY=("$UTILS_BASE"/[0-9]*.png "$UTILS_BASE"/*.png "$UTILS_BASE"/*.gif)
 shopt -u nocaseglob
+# Sin kitty ni chafa no hay forma de mostrar png/gif/video
+# (saldrían como basura binaria) -> solo ASCII del pool.
+if (( ! HAS_KITTY )) && (( ! HAS_CHAFA )); then
+    IMGS=(); GIFS=(); VIDS=(); LEGACY=()
+fi
 # Filtrar enlaces rotos / vacíos por categoría
 for arr in IMGS GIFS VIDS TXTS LEGACY; do
     # shellcheck disable=SC1087
@@ -107,23 +174,9 @@ fi
 EXT="${PICK##*.}"
 EXT="$(printf '%s' "$EXT" | tr '[:upper:]' '[:lower:]')"
 
-# Tipo de logo según extensión + terminal
-# kitty es el default pedido; fuera de kitty usamos auto para no romper sixel/iterm
-LOGO_TYPE="kitty"
-if [[ "${TERM:-}" != *kitty* && -z "${KITTY_WINDOW_ID:-}" ]]; then
-    # fastfetch --logo-type auto detecta kitty/sixel/iterm; para txt usamos file
-    case "$EXT" in
-        txt|ascii) LOGO_TYPE="file" ;;
-        *)         LOGO_TYPE="auto"  ;;
-    esac
-else
-    case "$EXT" in
-        txt|ascii) LOGO_TYPE="file" ;;
-        *)         LOGO_TYPE="kitty" ;;
-    esac
-fi
-
-LOGO_SOURCE="$PICK"
+# Tipo de logo según extensión + capacidades del terminal
+# (con chafa las imágenes se pre-renderizan a texto cacheado)
+_apply_logo "$PICK"
 
 # ──5. Videos: extraer thumbnail con ffmpeg ────────────────────
 # fastfetch no reproduce video, así que mostramos el primer frame en kitty.
@@ -132,17 +185,19 @@ case "$EXT" in
         THUMB="${TMPDIR:-/tmp}/ff-random-thumb-$UID.png"
         if command -v ffmpeg >/dev/null 2>&1; then
             if ffmpeg -y -loglevel error -i "$PICK" -vframes 1 "$THUMB" 2>/dev/null && [[ -s "$THUMB" ]]; then
-                LOGO_SOURCE="$THUMB"
-                [[ "$LOGO_TYPE" == "file" ]] && LOGO_TYPE="kitty"
-                if [[ "${TERM:-}" != *kitty* && -z "${KITTY_WINDOW_ID:-}" ]]; then LOGO_TYPE="auto"; else LOGO_TYPE="kitty"; fi
+                _apply_logo "$THUMB"
             else
                 echo "[ff-random] ffmpeg no pudo extraer frame de $PICK, elijo otro" >&2
                 # reintento simple con imagen fija
                 IMGS=()
                 for f in "${POOL[@]}"; do
-                    case "${f##*.}" in [Pp][Nn][Gg]|[Jj][Pp][Gg]|[Gg][Ii][Ff]) IMGS+=("$f") ;; esac
+                    case "${f##*.}" in [Pp][Nn][Gg]|[Jj][Pp][Gg]|[Gg][Ii][Ff]|[Tt][Xx][Tt]) IMGS+=("$f") ;; esac
                 done
-                (( ${#IMGS[@]} > 0 )) && LOGO_SOURCE="${IMGS[$(( RANDOM % ${#IMGS[@]} ))]}" || LOGO_SOURCE="$PICK"
+                if (( ${#IMGS[@]} > 0 )); then
+                    _apply_logo "${IMGS[$(( RANDOM % ${#IMGS[@]} ))]}"
+                else
+                    LOGO_SOURCE="$PICK"
+                fi
             fi
         else
             echo "[ff-random] ffmpeg no instalado, omito video $PICK" >&2
@@ -151,8 +206,7 @@ case "$EXT" in
                 case "${f##*.}" in [Pp][Nn][Gg]|[Jj][Pp][Gg]|[Gg][Ii][Ff]|[Tt][Xx][Tt]) IMGS+=("$f") ;; esac
             done
             if (( ${#IMGS[@]} > 0 )); then
-                LOGO_SOURCE="${IMGS[$(( RANDOM % ${#IMGS[@]} ))]}"
-                case "$LOGO_SOURCE" in *.txt|*.TXT) LOGO_TYPE="file" ;; *) LOGO_TYPE="kitty" ;; esac
+                _apply_logo "${IMGS[$(( RANDOM % ${#IMGS[@]} ))]}"
             fi
         fi
         ;;

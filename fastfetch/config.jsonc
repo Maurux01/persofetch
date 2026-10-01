@@ -2,13 +2,13 @@
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
     // El randomizer (randomizer.sh) sobreescribe type/source por CLI:
-    //   --logo-type kitty --logo ~/shell-workflow/utils/icons/*.png
-    //   --logo-type kitty --logo ~/shell-workflow/utils/gifs/*.gif (animado en kitty)
-    //   --logo-type file  --logo ~/shell-workflow/utils/ASCII/*.txt
-    //   videos -> thumbnail png vía ffmpeg, mostrado como kitty
-    // Este bloque es solo el fallback cuando se llama `command fastfetch` directo.
-    "type": "kitty",
-    "source": "~/shell-workflow/utils/icons/skull.png",
+    //   kitty con gráficos -> --logo-type kitty --logo utils/icons/*.png|gifs/*.gif
+    //   terminal normal + chafa -> --logo-type chafa --logo <png|gif|jpg>
+    //   sin gráficos -> --logo-type file --logo utils/ASCII/*.txt
+    // Este bloque es solo el fallback para `command fastfetch` directo:
+    // ASCII que existe siempre tras install.sh (utils/ -> ~/.config/fastfetch/utils).
+    "type": "file",
+    "source": "~/.config/fastfetch/utils/ASCII/debian.txt",
     "color": {
       "1": "green",
       "2": "bright_green"
@@ -16,9 +16,7 @@
     "padding": {
       "top": 1,
       "left": 2
-    },
-    "width": 32,
-    "height": 18
+    }
   },
   "display": {
     "separator": " │ ",
@@ -28,30 +26,30 @@
       "separator": "green"
     },
     "key": {
-      "width": 14
+      "width": 10
     }
   },
   "modules": [
     {
       "type": "title",
-      "format": "fastfetch - {version}",
+      "format": "{user-name}@{host-name}",
       "color": {
         "title": "bright_green"
       }
     },
     {
       "type": "os",
-      "key": "   Linux",
+      "key": "  OS",
       "format": "{name} {version} ({arch})"
     },
     {
       "type": "kernel",
-      "key": "   Kernel",
-      "format": "{name} {version}"
+      "key": "  Kernel",
+      "format": "{sysname} {release} {version}"
     },
     {
       "type": "locale",
-      "key": "   Locale"
+      "key": "  Locale"
     },
     {
       "type": "custom",
@@ -70,32 +68,32 @@
     },
     {
       "type": "chassis",
-      "key": "   Chassis"
+      "key": "  Chassis"
     },
     {
       "type": "memory",
-      "key": "   RAM",
-      "format": "{used} / {total} ({percentage}%)"
+      "key": "  RAM",
+      "format": "{used} / {total} ({percentage})"
     },
     {
       "type": "swap",
-      "key": "   SWAP",
-      "format": "{used} / {total} ({percentage}%)"
+      "key": "  Swap",
+      "format": "{used} / {total} ({percentage})"
     },
     {
       "type": "cpu",
-      "key": "   CPU",
-      "format": "{name} ({cores}) @ {maxFrequency} GHz"
+      "key": "  CPU",
+      "format": "{name} ({cores-logical}) @ {freq-base}"
     },
     {
       "type": "gpu",
-      "key": "   GPU",
-      "format": "{name} ({size} GiB) [{type}]"
+      "key": "  GPU",
+      "format": "{name} ({dedicated-total}) [{type}]"
     },
     {
       "type": "disk",
-      "key": "   Disk",
-      "format": "{used} / {total} ({percentage}%) - {filesystem}"
+      "key": "  Disk",
+      "format": "[{mountpoint}] {size-used} / {size-total} ({size-percentage}) - {filesystem}"
     },
     {
       "type": "custom",
@@ -114,20 +112,19 @@
     },
     {
       "type": "desktop",
-      "key": " 﩯  Desktop"
+      "key": "  Desktop"
     },
     {
       "type": "wm",
-      "key": "   Session"
+      "key": "  Session"
     },
     {
       "type": "display",
-      "key": "   Display",
-      "format": "{resolution} @ {refreshRate}Hz"
+      "key": "  Display"
     },
     {
       "type": "opengl",
-      "key": "   G-Driver"
+      "key": "  GL-Driver"
     },
     {
       "type": "custom",
