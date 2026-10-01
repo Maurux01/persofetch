@@ -5,9 +5,11 @@
 # Supports Debian/Ubuntu and Arch Linux
 
 set -u
-# NOTA: no usamos `set -e` a propósito: las herramientas ASCII / cargo / kew
-# son opcionales y un fallo puntual (paquete ausente, /tmp sucio, error de
-# compilación) no debe abortar toda la instalación.
+# NOTA: no usamos `set -e` a propósito: alguna herramienta puede faltar en
+# repos y un fallo puntual no debe abortar toda la instalación.
+# POLÍTICA: todo se instala SOLO desde repos (apt en Debian, pacman en Arch).
+# Nada compilado: sin cargo/rustup, sin make, sin git-clone de herramientas
+# (excepción: TPM, que solo existe vía git clone y no compila nada).
 
 # Colors for output
 RED='\033[0;31m'
@@ -68,6 +70,7 @@ install_core_tools() {
             curl \
             fzf \
             starship \
+            lf \
             timg \
             tmux \
             mpd \
@@ -82,8 +85,7 @@ install_core_tools() {
             bash-completion \
         || log_warn "Algún paquete core falló (ver arriba). Sigo con el resto."
         
-        log_warn "Some tools (yazi, spotify-player, rmpc, termusic, kew) are not in default Debian repos."
-        log_info "They will be installed via cargo or compiled from source in the next steps."
+        log_warn "spotify-player, rmpc y termusic no están en repos Debian, se omiten (sin compilar)."
         
     elif [ "$OS" = "arch" ]; then
         sudo pacman -S --noconfirm \
@@ -111,44 +113,18 @@ install_ascii_tools() {
     log_info "Installing ASCII terminal utilities..."
     
     if [ "$OS" = "debian" ]; then
-        # asciiquarium NO existe en los repos Debian -> se omite (no debe
-        # tumbar el apt completo). cmatrix/figlet/lolcat ya vienen de core.
+        # asciiquarium NO existe en repos Debian -> se omite.
+        # OJO: en Debian el paquete se llama pipes-sh (con guion).
+        # cbonsai y pipes-sh SÍ están en repos trixie -> solo apt, nada compilado.
         sudo apt install -y \
             cmatrix \
             figlet \
             toilet \
             lolcat \
+            pipes-sh \
+            cbonsai \
         || log_warn "Algún paquete ASCII falló, sigo igual."
         log_warn "asciiquarium no está en repos Debian, se omite."
-
-        # Install pipes.sh from source
-        if [ ! -f /usr/local/bin/pipes.sh ]; then
-            log_info "Installing pipes.sh from source..."
-            rm -rf /tmp/pipes.sh
-            if git clone https://github.com/pipeseroni/pipes.sh.git /tmp/pipes.sh; then
-                sudo cp /tmp/pipes.sh/pipes.sh /usr/local/bin/pipes.sh \
-                    && sudo chmod +x /usr/local/bin/pipes.sh \
-                    && log_success "pipes.sh installed" \
-                    || log_warn "No se pudo copiar pipes.sh a /usr/local/bin."
-            else
-                log_warn "No se pudo clonar pipes.sh, se omite."
-            fi
-            rm -rf /tmp/pipes.sh
-        fi
-
-        # Install cbonsai from source
-        if ! command -v cbonsai &> /dev/null; then
-            log_info "Installing cbonsai from source..."
-            rm -rf /tmp/cbonsai
-            if git clone https://gitlab.com/jallbrit/cbonsai.git /tmp/cbonsai; then
-                (cd /tmp/cbonsai && sudo make install) \
-                    && log_success "cbonsai installed" \
-                    || log_warn "make install de cbonsai falló, se omite."
-            else
-                log_warn "No se pudo clonar cbonsai, se omite."
-            fi
-            rm -rf /tmp/cbonsai
-        fi
         
     elif [ "$OS" = "arch" ]; then
         sudo pacman -S --noconfirm \
@@ -163,71 +139,42 @@ install_ascii_tools() {
     fi
 }
 
-# Install Rust-based tools via cargo
-install_cargo_tools() {
-    log_info "Checking for Rust toolchain..."
-
-    if ! command -v cargo &> /dev/null; then
-        log_warn "Rust not found. Installing rustup..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-            || { log_warn "rustup falló, salto herramientas cargo."; return 0; }
-        # shellcheck disable=SC1091
-        source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
-    fi
-
-    export PATH="$HOME/.cargo/bin:$PATH"
-
-    log_info "Installing Rust-based tools via cargo..."
-
-    # Install yazi on Debian (Arch has it in repos)
+# Install music players — SOLO desde repos, nada compilado.
+# Debian: spotify-player/rmpc/termusic no existen en apt -> se omiten.
+# Arch: los tres están en [extra] -> pacman.
+install_music_players() {
     if [ "$OS" = "debian" ]; then
-        if ! command -v yazi &> /dev/null; then
-            log_info "Installing yazi..."
-            cargo install yazi-fm yazi-cli \
-                || log_warn "yazi falló (faltan deps o ya instalado). Sigo igual."
-        fi
+        log_warn "spotify-player, rmpc y termusic no están en repos Debian, se omiten (nada compilado)."
+        return 0
+    elif [ "$OS" = "arch" ]; then
+        log_info "Installing music players from repos (pacman)..."
+        sudo pacman -S --noconfirm spotify-player rmpc termusic \
+            || log_warn "Algún reproductor falló, sigo igual."
     fi
-
-    # Install other rust tools
-    cargo install --locked \
-        spotify_player \
-        rmpc \
-        termusic 2>/dev/null || log_warn "Some cargo packages may have failed (already installed or build errors)"
 }
 
-# Install kew (C-based music player)
+# Install kew — SOLO desde repos, nada compilado.
+# (kew SÍ está en Debian trixie y en Arch [extra].)
 install_kew() {
     if command -v kew &> /dev/null; then
         log_info "kew ya instalado, salto."
         return 0
     fi
-    log_info "Installing kew (music player)..."
-
+    log_info "Installing kew from repos..."
     if [ "$OS" = "debian" ]; then
-        sudo apt install -y build-essential libncurses-dev libasound2-dev \
-            || log_warn "Deps de kew fallaron, intento compilar igual."
-    elif [ "$OS" = "arch" ]; then
-        sudo pacman -S --noconfirm base-devel ncurses alsa-lib \
-            || log_warn "Deps de kew fallaron, intento compilar igual."
-    fi
-
-    rm -rf /tmp/kew
-    if ! git clone https://github.com/ravachol/kew.git /tmp/kew; then
-        log_warn "No se pudo clonar kew, se omite."
-        rm -rf /tmp/kew
-        return 0
-    fi
-    if (cd /tmp/kew && make); then
-        (cd /tmp/kew && sudo make install) \
+        sudo apt install -y kew \
             && log_success "kew installed" \
-            || log_warn "make install de kew falló, se omite."
-    else
-        log_warn "make de kew falló, se omite."
+            || log_warn "kew falló, se omite."
+    elif [ "$OS" = "arch" ]; then
+        sudo pacman -S --noconfirm kew \
+            && log_success "kew installed" \
+            || log_warn "kew falló, se omite."
     fi
-    rm -rf /tmp/kew
 }
 
 # Install Tmux Plugin Manager
+# Excepción a la política de repos: TPM solo existe vía git clone.
+# No compila nada, solo clona plugins de tmux a ~/.tmux/plugins/tpm.
 install_tpm() {
     log_info "Installing Tmux Plugin Manager (TPM)..."
 
@@ -258,63 +205,30 @@ install_fastfetch() {
     fi
 }
 
-# Install best Nerd Font: JetBrainsMono Nerd Font
-# - La mejor para terminal/dev: legible, ligaduras, iconos perfectos
-#   para starship/tmux/fastfetch/kitty.
-# - Idempotente: si ya existe en fc-list, salta.
-# - Instalación a nivel usuario: ~/.local/share/fonts (sin sudo,
-#   funciona en Debian/Arch/Kali/WSL).
+# Install JetBrainsMono — SOLO desde repos, nada compilado ni descargado.
+# - Arch: ttf-jetbrains-mono-nerd (parcheada Nerd, con iconos) desde [extra].
+# - Debian: solo existe fonts-jetbrains-mono (normal, SIN iconos Nerd).
+#   Se instala esa y se avisa: para iconos Nerd completos usar Arch o
+#   instalar la Nerd manualmente.
 install_nerdfonts() {
-    local font_name="JetBrainsMono"
-    local font_dir="$HOME/.local/share/fonts/$font_name"
-    local url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
-    local tmp_zip="/tmp/${font_name}.zip"
+    log_info "Checking JetBrainsMono..."
 
-    log_info "Checking Nerd Font ($font_name)..."
-
-    if fc-list 2>/dev/null | grep -qi "${font_name}.*Nerd"; then
-        log_info "Nerd Font $font_name ya instalada, salto."
+    if fc-list 2>/dev/null | grep -qi "JetBrainsMono"; then
+        log_info "JetBrainsMono ya instalada, salto."
         return 0
     fi
 
-    # Deps mínimas para descargar/descomprimir/cachear fuentes
-    if ! command -v unzip &> /dev/null || ! command -v fc-cache &> /dev/null || ! command -v curl &> /dev/null; then
-        log_info "Instalando dependencias de fuentes (unzip, fontconfig, curl)..."
-        if [ "$OS" = "debian" ]; then
-            sudo apt install -y unzip fontconfig curl \
-                || log_warn "Deps de fuentes fallaron, intento seguir igual."
-        elif [ "$OS" = "arch" ]; then
-            sudo pacman -S --noconfirm unzip fontconfig curl \
-                || log_warn "Deps de fuentes fallaron, intento seguir igual."
-        fi
-    fi
-
-    mkdir -p "$font_dir" || { log_error "No pude crear $font_dir"; return 1; }
-
-    log_info "Descargando $font_name Nerd Font (latest)..."
-    rm -f "$tmp_zip"
-    if ! curl -fLo "$tmp_zip" --retry 3 "$url"; then
-        log_error "No se pudo descargar $url"
-        return 1
-    fi
-
-    log_info "Instalando en $font_dir ..."
-    if ! unzip -o -q "$tmp_zip" -d "$font_dir"; then
-        log_error "No se pudo descomprimir $tmp_zip"
-        rm -f "$tmp_zip"
-        return 1
-    fi
-    rm -f "$tmp_zip"
-
-    log_info "Regenerando caché de fuentes (fc-cache)..."
-    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 \
-        || fc-cache -f >/dev/null 2>&1 \
-        || log_warn "fc-cache falló, la fuente igual quedó copiada."
-
-    if fc-list 2>/dev/null | grep -qi "${font_name}.*Nerd"; then
-        log_success "Nerd Font $font_name instalada en $font_dir"
-    else
-        log_warn "Copiada en $font_dir pero fc-list aún no la ve (reabre la terminal o corre: fc-cache -fv)."
+    if [ "$OS" = "debian" ]; then
+        sudo apt install -y fonts-jetbrains-mono fontconfig \
+            || { log_warn "Fuente falló, se omite."; return 0; }
+        fc-cache -f >/dev/null 2>&1 || true
+        log_warn "En Debian se instaló la JetBrainsMono NORMAL (apt no tiene la Nerd). Los iconos Nerd de starship/tmux pueden faltar."
+        log_success "JetBrainsMono (normal) instalada vía apt."
+    elif [ "$OS" = "arch" ]; then
+        sudo pacman -S --noconfirm ttf-jetbrains-mono-nerd \
+            || { log_warn "Fuente falló, se omite."; return 0; }
+        fc-cache -f >/dev/null 2>&1 || true
+        log_success "JetBrainsMono Nerd instalada vía pacman."
     fi
 }
 
@@ -459,7 +373,7 @@ main() {
     update_packages
     install_core_tools
     install_ascii_tools
-    install_cargo_tools
+    install_music_players
     install_kew
     install_tpm
     install_fastfetch
@@ -476,13 +390,14 @@ main() {
     echo "  Installation Complete"
     echo "========================================"
     echo ""
-    echo "Installed tools:"
+    echo "Installed tools (solo repos, nada compilado):"
     echo "  Core: fzf, starship, timg, tmux, mpd, playerctl, 7zip, gh, hstr"
-    echo "  ASCII: cmatrix, pipes.sh, cbonsai, figlet, lolcat,  asciiquarium"
-    echo "  Rust: yazi, spotify-player, rmpc, termusic"
-    echo "  C: kew"
+    echo "  ASCII: cmatrix, pipes-sh, cbonsai, figlet, lolcat (+asciiquarium solo Arch)"
+    echo "  Música: spotify-player, rmpc, termusic (solo Arch, en Debian se omiten)"
+    echo "  File manager: yazi (Arch, desde repo) / lf (Debian, desde repo)"
+    echo "  Reproductor C: kew (desde repo)"
     echo "  Terminal: kitty (por defecto, TERMINAL=kitty), cava, chafa"
-    echo "  Other: TPM, fastfetch, bash-completion, JetBrainsMono Nerd Font"
+    echo "  Other: TPM (git clone, sin compilar), fastfetch, bash-completion, JetBrainsMono (Nerd en Arch / normal en Debian)"
     echo ""
     echo "Next steps:"
     echo "  1. Restart your terminal or run: source ~/.bashrc"

@@ -226,7 +226,7 @@ maybe_run_tools() {
     else
         echo ""
         echo "¿Quieres instalar las herramientas con tools.sh"
-        echo "(fzf, starship, tmux, fastfetch, yazi, pipes.sh, etc.)?"
+        echo "(fzf, starship, tmux, fastfetch, yazi [Arch] / lf [Debian], pipes.sh, etc.)?"
         if ask_yes_no "  Instalar tools.sh" "n"; then run_tools=1; fi
     fi
     if (( run_tools )); then

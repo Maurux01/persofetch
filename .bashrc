@@ -111,7 +111,12 @@ alias mkdir='mkdir -p'
 
 # Tool aliases
 alias ff='fastfetch'
-alias y='yazi'
+# File manager: yazi (Arch, desde repo) / lf (Debian, desde repo)
+if command -v yazi >/dev/null 2>&1; then
+    alias y='yazi'
+elif command -v lf >/dev/null 2>&1; then
+    alias y='lf'
+fi
 alias hist='hstr'
 alias tm='tmux'
 alias tma='tmux attach -t'
