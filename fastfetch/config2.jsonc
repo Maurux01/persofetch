@@ -1,0 +1,146 @@
+//this is your personal configuration of fastfetch
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    // randomizer.sh sobreescribe type/source por CLI. Aquí solo defaults sanos:
+    // - type auto: detecta txt como texto e imagen como imagen (el override manda).
+    // - width/height SIEMPRE fijados: sin esto los png/gif salen a tamaño natural
+    //   y hacen scroll/corte (ver wiki Troubleshooting #2 y #5).
+    // - animationFrame 0: los gif/apng animan en kitty (fastfetch >= 2.69 con type kitty).
+    //   Con type kitty-icat la animación la hace `kitten` y este campo no afecta.
+    "type": "auto",
+    "width": 32,
+    "height": 16,
+    "animationFrame": 0,
+    "color": {
+      "1": "green",
+      "2": "bright_green"
+    },
+    "padding": {
+      "top": 1,
+      "left": 2
+    }
+  },
+  "display": {
+    "separator": " │ ",
+    "color": {
+      "keys": "green",
+      "title": "bright_green",
+      "separator": "green"
+    },
+    "key": {
+      "width": 14
+    }
+  },
+  "modules": [
+    {
+      "type": "title",
+      "format": "fastfetch - {version}",
+      "color": {
+        "title": "bright_green"
+      }
+    },
+    {
+      "type": "os",
+      "key": "   Linux",
+      "format": "{name} {version} ({arch})"
+    },
+    {
+      "type": "kernel",
+      "key": "   Kernel",
+      "format": "{name} {version}"
+    },
+    {
+      "type": "locale",
+      "key": "   Locale"
+    },
+    {
+      "type": "custom",
+      "format": "┌──────────────────────────────────────────────┐",
+      "outputColor": "green"
+    },
+    {
+      "type": "custom",
+      "format": "│  Hardware                                    │",
+      "outputColor": "bright_green"
+    },
+    {
+      "type": "custom",
+      "format": "├──────────────────────────────────────────────┤",
+      "outputColor": "green"
+    },
+    {
+      "type": "chassis",
+      "key": "   Chassis"
+    },
+    {
+      "type": "memory",
+      "key": "   RAM",
+      "format": "{used} / {total} ({percentage}%)"
+    },
+    {
+      "type": "swap",
+      "key": "   SWAP",
+      "format": "{used} / {total} ({percentage}%)"
+    },
+    {
+      "type": "cpu",
+      "key": "   CPU",
+      "format": "{name} ({cores}) @ {maxFrequency} GHz"
+    },
+    {
+      "type": "gpu",
+      "key": "   GPU",
+      "format": "{name} ({size} GiB) [{type}]"
+    },
+    {
+      "type": "disk",
+      "key": "   Disk",
+      "format": "{used} / {total} ({percentage}%) - {filesystem}"
+    },
+    {
+      "type": "custom",
+      "format": "├──────────────────────────────────────────────┤",
+      "outputColor": "green"
+    },
+    {
+      "type": "custom",
+      "format": "│  Desktop                                     │",
+      "outputColor": "bright_green"
+    },
+    {
+      "type": "custom",
+      "format": "├──────────────────────────────────────────────┤",
+      "outputColor": "green"
+    },
+    {
+      "type": "desktop",
+      "key": " 﩯  Desktop"
+    },
+    {
+      "type": "wm",
+      "key": "   Session"
+    },
+    {
+      "type": "display",
+      "key": "   Display",
+      "format": "{resolution} @ {refreshRate}Hz"
+    },
+    {
+      "type": "opengl",
+      "key": "   G-Driver"
+    },
+    {
+      "type": "custom",
+      "format": "└──────────────────────────────────────────────┘",
+      "outputColor": "green"
+    },
+    {
+      "type": "colors",
+      "symbol": "block",
+      "block": {
+        "range": [0, 7]
+      }
+    }
+  ]
+}

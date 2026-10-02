@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ff-random — fastfetch randomizer (png / gif / video / ascii)
+# ff-random — fastfetch randomizer (png / gif / video / ascii / colorscripts)
 # Cada invocación elige un archivo aleatorio de utils/ y lo muestra con fastfetch.
 # kitty con gráficos -> protocolo kitty; terminal normal + chafa -> arte a color;
 # sin gráficos -> ASCII (logo-type file, nunca basura binaria).
@@ -74,11 +74,40 @@ _chafa_render() { # $1 = imagen -> imprime ruta del txt cacheado o falla
     printf '%s' "$cache"
 }
 
+# Normaliza texto/ANSI a un temporal acotado (solo agrega, no toca originales).
+# Regla única: nada supera 45 columnas x 22 líneas.
+# - Quita \r (los sprites de colorscripts vienen con CRLF).
+# - Limita alto con head (los small/ ~15 líneas salen completos, large/ ~30 se recortan).
+# - Limita ancho con cut SOLO si no hay secuencias ANSI: cortar un \x1b[...m
+#   a mitad lo rompería y saldría basura.
+_normalize_text() { # $1 = src -> imprime ruta del temporal normalizado
+    local src="$1" tmp
+    tmp="$(mktemp "${TMPDIR:-/tmp}/ff-random-txt.XXXXXX")"
+    if grep -q $'\x1b' -- "$src" 2>/dev/null; then
+        tr -d '\r' < "$src" | head -n 22 > "$tmp"
+    else
+        head -n 22 -- "$src" | cut -c 1-45 | tr -d '\r' > "$tmp"
+    fi
+    [[ -s "$tmp" ]] || cp -- "$src" "$tmp"
+    printf '%s' "$tmp"
+}
+
 # Fija LOGO_SOURCE/LOGO_TYPE para una ruta elegida, con chafa si aplica.
 _apply_logo() { # $1 = ruta elegida
+    # Sin extensión = sprite de colorscripts / arte ANSI -> normalizar + file-raw
+    # (file-raw: sin reemplazo de placeholders $[1-9], las secuencias quedan intactas).
+    if [[ "${1##*/}" != *.* ]]; then
+        LOGO_SOURCE="$(_normalize_text "$1")"
+        LOGO_TYPE="file-raw"
+        return 0
+    fi
     local e="$(printf '%s' "${1##*.}" | tr '[:upper:]' '[:lower:]')"
     LOGO_SOURCE="$1"
     LOGO_TYPE="$(_logo_type_for "$e")"
+    # txt/ascii: normalizar tamaño (se mantiene type file para los $1..$9 de color).
+    case "$e" in
+        txt|ascii|ans|nfo) LOGO_SOURCE="$(_normalize_text "$1")" ;;
+    esac
     if (( ! HAS_KITTY )) && (( HAS_CHAFA )); then
         case "$e" in
             png|jpg|jpeg|webp|gif)
@@ -107,12 +136,15 @@ for a in "$@"; do
     esac
 done
 
-# ──3. Construir pool: pngs + gifs + ascii + videos ────────────
+# ──3. Construir pool: pngs + gifs + ascii + videos + colorscripts ──
 shopt -s nullglob nocaseglob
 IMGS=("$UTILS_BASE"/icons/*.png "$UTILS_BASE"/icons/*.jpg "$UTILS_BASE"/icons/*.jpeg "$UTILS_BASE"/icons/*.webp)
 GIFS=("$UTILS_BASE"/gifs/*.gif)
 VIDS=("$UTILS_BASE"/videos/*.mp4 "$UTILS_BASE"/videos/*.mkv "$UTILS_BASE"/videos/*.webm "$UTILS_BASE"/videos/*.mov)
 TXTS=("$UTILS_BASE"/ASCII/*.txt "$UTILS_BASE"/ascii/*.txt)
+# Sprites ANSI sin extensión: colorscripts/small|large regular|shiny/* (+ cualquier
+# archivo suelto en colorscripts/ o un nivel intermedio). Entran al sorteo mezclados.
+CS=("$UTILS_BASE"/colorscripts/* "$UTILS_BASE"/colorscripts/*/* "$UTILS_BASE"/colorscripts/*/*/*)
 # Compat: estructura vieja ~/.config/fastfetch/logos/[0-9]*.png
 LEGACY=("$UTILS_BASE"/[0-9]*.png "$UTILS_BASE"/*.png "$UTILS_BASE"/*.gif)
 shopt -u nocaseglob
@@ -121,19 +153,21 @@ shopt -u nocaseglob
 if (( ! HAS_KITTY )) && (( ! HAS_CHAFA )); then
     IMGS=(); GIFS=(); VIDS=(); LEGACY=()
 fi
-# Filtrar enlaces rotos / vacíos por categoría
-for arr in IMGS GIFS VIDS TXTS LEGACY; do
+# Filtrar enlaces rotos / vacíos / directorios por categoría
+for arr in IMGS GIFS VIDS TXTS CS LEGACY; do
     # shellcheck disable=SC1087
     eval "TMP=(); for f in \"\${${arr}[@]}\"; do [[ -f \"\$f\" && -s \"\$f\" ]] && TMP+=(\"\$f\"); done; ${arr}=(\"\${TMP[@]}\")"
 done
-# Categorías no vacías (balancea png/gif/txt/video en vez de puro peso por cantidad)
+# Categorías no vacías (balancea png/gif/txt/video/colorscripts en vez de
+# puro peso por cantidad: con sorteo global puro los 5000+ sprites saldrían el 84%).
 CATS=()
 (( ${#IMGS[@]} > 0 )) && CATS+=("IMGS")
 (( ${#GIFS[@]} > 0 )) && CATS+=("GIFS")
 (( ${#VIDS[@]} > 0 )) && CATS+=("VIDS")
 (( ${#TXTS[@]} > 0 )) && CATS+=("TXTS")
+(( ${#CS[@]} > 0 )) && CATS+=("CS")
 (( ${#LEGACY[@]} > 0 )) && CATS+=("LEGACY")
-POOL=("${IMGS[@]}" "${GIFS[@]}" "${VIDS[@]}" "${TXTS[@]}" "${LEGACY[@]}")
+POOL=("${IMGS[@]}" "${GIFS[@]}" "${VIDS[@]}" "${TXTS[@]}" "${CS[@]}" "${LEGACY[@]}")
 
 if (( ${#POOL[@]} == 0 )); then
     echo "[ff-random] Pool vacío en $UTILS_BASE, lanzo fastfetch normal" >&2
