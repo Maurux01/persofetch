@@ -152,7 +152,7 @@ _apply_logo() { # $1 = ruta elegida
     case "$e" in
         txt|ascii|ans|nfo) LOGO_SOURCE="$(_normalize_text "$1")" ;;
     esac
-    if (( ! HAS_KITTY )) && (( HAS_CHAFA )); then
+    if (( ! FF_KITTY_IMG )) && (( HAS_CHAFA )); then
         case "$e" in
             png|jpg|jpeg|webp|gif)
                 local r
@@ -234,14 +234,15 @@ CS=(
 # Compat: estructura vieja ~/.config/fastfetch/logos/[0-9]*.png
 LEGACY=("$UTILS_BASE"/[0-9]*.png "$UTILS_BASE"/*.png "$UTILS_BASE"/*.gif)
 shopt -u nocaseglob
-# Sin kitty ni chafa no hay forma de mostrar png/gif/video
-# (saldrían como basura binaria) -> solo ASCII del pool.
+# Sin protocolo kitty viable ni chafa no hay forma de mostrar png/gif/video
+# (saldrían como basura binaria o caerían al builtin fijo) -> solo ASCII.
 # Solución: instala chafa (tools.sh ya lo hace: sudo apt install chafa)
-# o usa kitty. Con chafa las imágenes se pre-renderizan a ANSI y SÍ salen.
-if (( ! HAS_KITTY )) && (( ! HAS_CHAFA )); then
+# o usa kitty con un fastfetch con imagemagick. Con chafa las imágenes se
+# pre-renderizan a ANSI y SÍ salen.
+if (( ! FF_KITTY_IMG )) && (( ! HAS_CHAFA )); then
     IMGS=(); GIFS=(); VIDS=(); LEGACY=()
     if (( DEBUG || STATS_ONLY )); then
-        echo "[ff-random] sin kitty ni chafa: png/gif/video excluidos. Instala chafa o usa kitty." >&2
+        echo "[ff-random] sin kitty-viable ni chafa: png/gif/video excluidos. Instala chafa o usa kitty." >&2
     fi
 fi
 # Filtrar enlaces rotos / vacíos / directorios por categoría
@@ -268,13 +269,15 @@ POOL=("${IMGS[@]}" "${GIFS[@]}" "${VIDS[@]}" "${TXTS[@]}" "${CS[@]}" "${LEGACY[@
 
 # Diagnóstico: conteos por categoría (verifica que png/gif entran al sorteo)
 if (( STATS_ONLY || DEBUG )); then
-    echo "[ff-random] utils=$UTILS_BASE kitty=$HAS_KITTY chafa=$HAS_CHAFA (medida ${LOGO_W}x${LOGO_H})" >&2
+    echo "[ff-random] utils=$UTILS_BASE kitty=$HAS_KITTY magick=$FF_HAS_MAGICK kitty-img=$FF_KITTY_IMG chafa=$HAS_CHAFA (medida ${LOGO_W}x${LOGO_H})" >&2
     echo "[ff-random] pool: IMGS=${#IMGS[@]} GIFS=${#GIFS[@]} VIDS=${#VIDS[@]} TXTS=${#TXTS[@]} CS=${#CS[@]} LEGACY=${#LEGACY[@]} TOTAL=${#POOL[@]}" >&2
     if (( STATS_ONLY )); then exit 0; fi
 fi
 
 if (( ${#POOL[@]} == 0 )); then
     echo "[ff-random] Pool vacío en $UTILS_BASE, lanzo fastfetch normal" >&2
+    echo "[ff-random] Busqué utils en: ${CANDIDATES[*]}" >&2
+    echo "[ff-random] Revisa FF_UTILS_DIR o re-corre install.sh" >&2
     if [[ -n "$BASE_CONFIG" ]]; then command fastfetch --config "$BASE_CONFIG" "$@"; exit $?
     else command fastfetch "$@"; exit $?; fi
 fi
