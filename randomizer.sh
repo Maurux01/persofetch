@@ -65,12 +65,31 @@ if [[ "${FF_FORCE_ASCII:-0}" == "1" ]]; then
     HAS_KITTY=0; HAS_CHAFA=0
 fi
 
+# ──1c. Capacidades del BINARIO fastfetch ────────────────────────
+# En Linux el tipo kitty necesita fastfetch compilado con imagemagick; sin
+# eso fastfetch IGNORA la imagen y cae al logo builtin (siempre el mismo,
+# ej. Debian). Si el binario no puede con imágenes, usamos chafa CLI
+# (pre-render a ANSI) o ASCII: nunca el builtin fijo.
+FF_FEATS="$(command fastfetch --list-features 2>/dev/null)"
+FF_HAS_MAGICK=0
+printf '%s' "$FF_FEATS" | grep -qi 'imagemagick' && FF_HAS_MAGICK=1
+unset FF_FEATS
+# En macOS/Windows/Android decodifica el framework del sistema (sin magick).
+case "$(uname -s 2>/dev/null)" in
+    Linux|*BSD|SunOS) : ;;       # requieren magick: FF_HAS_MAGICK manda
+    *) FF_HAS_MAGICK=1 ;;        # framework propio: kitty viable sin magick
+esac
+# FF_KITTY_IMG = puedo mostrar imágenes de verdad con protocolo kitty
+FF_KITTY_IMG=0
+if (( HAS_KITTY )) && (( FF_HAS_MAGICK )); then FF_KITTY_IMG=1; fi
+if [[ "${FF_FORCE_ASCII:-0}" == "1" ]]; then FF_KITTY_IMG=0; fi
+
 _logo_type_for() { # $1 = extensión (cualquier mayúsculas)
     local e="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
     case "$e" in
         txt|ascii) printf 'file' ;;
         *)
-            if (( HAS_KITTY )); then printf 'kitty'
+            if (( FF_KITTY_IMG )); then printf 'kitty'
             elif (( HAS_CHAFA )); then printf 'chafa'
             else printf 'file'
             fi ;;

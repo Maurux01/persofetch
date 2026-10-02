@@ -52,7 +52,6 @@
   "modules": [
     {
       "type": "title",
-      "format": "fastfetch - {version}",
       "color": {
         "title": "bright_green"
       }
