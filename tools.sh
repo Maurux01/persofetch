@@ -83,6 +83,8 @@ install_core_tools() {
             figlet \
             lolcat \
             bash-completion \
+            chafa \
+            ffmpeg \
         || log_warn "Algún paquete core falló (ver arriba). Sigo con el resto."
         
         log_warn "spotify-player, rmpc y termusic no están en repos Debian, se omiten (sin compilar)."
@@ -104,6 +106,8 @@ install_core_tools() {
             figlet \
             lolcat \
             bash-completion \
+            chafa \
+            ffmpeg \
         || log_warn "Algún paquete core falló, sigo igual."
     fi
 }

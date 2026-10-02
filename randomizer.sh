@@ -4,9 +4,25 @@
 # kitty con gráficos -> protocolo kitty; terminal normal + chafa -> arte a color;
 # sin gráficos -> ASCII (logo-type file, nunca basura binaria).
 # Uso: randomizer.sh [args extra de fastfetch]
+#      randomizer.sh --pool-stats          # muestra conteos por categoría y sale
+#      randomizer.sh --debug               # una tirada de prueba sin ejecutar fastfetch
+#      FF_CATEGORY=IMGS|GIFS|VIDS|TXTS|CS fastfetch   # fuerza una categoría (para verificar)
+#      FF_FORCE_KITTY=1 / FF_FORCE_CHAFA=1 / FF_FORCE_ASCII=1  # forzar capacidad
 # Si se pasa --logo / --logo-type explícito, se respeta y no se aleatoriza.
 
 set -u
+
+# ──0. Medida única del workflow ──────────────────────────────
+# TODO logo pasa por aquí: nada supera LOGO_W x LOGO_H.
+# - ASCII grandes (hasta 100 cols x 41 líneas) -> recortados a esto.
+# - colorscripts small (~36x19) -> salen completos.
+# - colorscripts large (~72x36) -> recortados de alto a LOGO_H; el ancho lo
+#   recorta fastfetch vía logo.width (cortar ANSI con `cut` rompería colores).
+# - png/gif/jpg vía chafa CLI -> --size LOGO_WxLOGO_H.
+# - png/gif en kitty -> fastfetch los escala a logo.width/height del config.
+# Debe coincidir con logo.width/height de fastfetch/config.jsonc.
+LOGO_W=40
+LOGO_H=20
 
 # ──1. Localizar base de utils ─────────────────────────────────
 # Orden: $FF_UTILS_DIR > ~/shell-workflow/utils > ~/.config/fastfetch/utils
@@ -33,13 +49,21 @@ if [[ -z "$UTILS_BASE" ]]; then
 fi
 
 # ──1b. Capacidades gráficas del terminal ───────────────────────
-# kitty: protocolo gráfico kitty (KITTY_WINDOW_ID o TERM=*-kitty*).
+# kitty: protocolo gráfico kitty (KITTY_WINDOW_ID o KITTY_PID o TERM=*-kitty*).
 # chafa: imagen -> texto a color en CUALQUIER terminal (apt install chafa).
 # Sin ninguno: solo ASCII (logo-type file), png/gif saldrían como basura.
 HAS_KITTY=0
-[[ -n "${KITTY_WINDOW_ID:-}" || "${TERM:-}" == *kitty* ]] && HAS_KITTY=1
+if [[ -n "${KITTY_WINDOW_ID:-}" || -n "${KITTY_PID:-}" || "${TERM:-}" == *kitty* || "${TERM_PROGRAM:-}" == *kitty* ]]; then
+    HAS_KITTY=1
+fi
 HAS_CHAFA=0
 command -v chafa >/dev/null 2>&1 && HAS_CHAFA=1
+# Overrides manuales (para verificar cada tipo de logo)
+[[ "${FF_FORCE_KITTY:-0}" == "1" ]] && HAS_KITTY=1
+[[ "${FF_FORCE_CHAFA:-0}" == "1" ]] && HAS_CHAFA=1
+if [[ "${FF_FORCE_ASCII:-0}" == "1" ]]; then
+    HAS_KITTY=0; HAS_CHAFA=0
+fi
 
 _logo_type_for() { # $1 = extensión (cualquier mayúsculas)
     local e="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -63,11 +87,11 @@ _chafa_render() { # $1 = imagen -> imprime ruta del txt cacheado o falla
     command -v chafa >/dev/null 2>&1 || return 1
     command -v md5sum >/dev/null 2>&1 || return 1
     mkdir -p "$CHAFA_CACHE" 2>/dev/null || return 1
-    key="$(printf '%s' "$src" | md5sum | cut -d' ' -f1)"
+    key="$(printf '%s|%sx%s' "$src" "$LOGO_W" "$LOGO_H" | md5sum | cut -d' ' -f1)"
     cache="$CHAFA_CACHE/$key.txt"
     if [[ ! -s "$cache" || "$src" -nt "$cache" ]]; then
-        if ! chafa --format symbols --symbols block --colors full --animate off --size 36x18 "$src" >"$cache" 2>/dev/null; then
-            chafa --format symbols --symbols block --colors full --size 36x18 "$src" >"$cache" 2>/dev/null || return 1
+        if ! chafa --format symbols --symbols block --colors full --animate off --size "${LOGO_W}x${LOGO_H}" "$src" >"$cache" 2>/dev/null; then
+            chafa --format symbols --symbols block --colors full --size "${LOGO_W}x${LOGO_H}" "$src" >"$cache" 2>/dev/null || return 1
         fi
         [[ -s "$cache" ]] || return 1
     fi
@@ -75,18 +99,19 @@ _chafa_render() { # $1 = imagen -> imprime ruta del txt cacheado o falla
 }
 
 # Normaliza texto/ANSI a un temporal acotado (solo agrega, no toca originales).
-# Regla única: nada supera 45 columnas x 22 líneas.
+# Regla única: nada supera LOGO_W columnas x LOGO_H líneas.
 # - Quita \r (los sprites de colorscripts vienen con CRLF).
-# - Limita alto con head (los small/ ~15 líneas salen completos, large/ ~30 se recortan).
+# - Limita alto con head (los small/ ~19 líneas salen completos, large/ ~36 se recortan).
 # - Limita ancho con cut SOLO si no hay secuencias ANSI: cortar un \x1b[...m
-#   a mitad lo rompería y saldría basura.
+#   a mitad lo rompería y saldría basura. El ancho de los ANSI lo recorta
+#   fastfetch con logo.width del config (40).
 _normalize_text() { # $1 = src -> imprime ruta del temporal normalizado
     local src="$1" tmp
     tmp="$(mktemp "${TMPDIR:-/tmp}/ff-random-txt.XXXXXX")"
     if grep -q $'\x1b' -- "$src" 2>/dev/null; then
-        tr -d '\r' < "$src" | head -n 22 > "$tmp"
+        tr -d '\r' < "$src" | head -n "$LOGO_H" > "$tmp"
     else
-        head -n 22 -- "$src" | cut -c 1-45 | tr -d '\r' > "$tmp"
+        head -n "$LOGO_H" -- "$src" | cut -c "1-$LOGO_W" | tr -d '\r' > "$tmp"
     fi
     [[ -s "$tmp" ]] || cp -- "$src" "$tmp"
     printf '%s' "$tmp"
@@ -121,12 +146,25 @@ _apply_logo() { # $1 = ruta elegida
     fi
 }
 
-# ──2. Config base ─────────────────────────────────────────────
+# ──2. Config base (CONFIG ÚNICA) ──────────────────────────────
 FF_BIN="$(command -v fastfetch)"
 BASE_CONFIG=""
 for cfg in "$HOME/.config/fastfetch/config.jsonc" "$_SCRIPT_DIR/fastfetch/config.jsonc"; do
     if [[ -f "$cfg" ]]; then BASE_CONFIG="$cfg"; break; fi
 done
+
+# Flags propias (se consumen aquí, no se pasan a fastfetch)
+DEBUG=0
+STATS_ONLY=0
+_FF_ARGS=()
+for a in "$@"; do
+    case "$a" in
+        --debug) DEBUG=1 ;;
+        --pool-stats) STATS_ONLY=1 ;;
+        *) _FF_ARGS+=("$a") ;;
+    esac
+done
+set -- "${_FF_ARGS[@]:-}"
 
 # Si el usuario ya pidió un logo explícito, no aleatorizar
 for a in "$@"; do
@@ -141,22 +179,49 @@ shopt -s nullglob nocaseglob
 IMGS=("$UTILS_BASE"/icons/*.png "$UTILS_BASE"/icons/*.jpg "$UTILS_BASE"/icons/*.jpeg "$UTILS_BASE"/icons/*.webp)
 GIFS=("$UTILS_BASE"/gifs/*.gif)
 VIDS=("$UTILS_BASE"/videos/*.mp4 "$UTILS_BASE"/videos/*.mkv "$UTILS_BASE"/videos/*.webm "$UTILS_BASE"/videos/*.mov)
-TXTS=("$UTILS_BASE"/ASCII/*.txt "$UTILS_BASE"/ascii/*.txt)
-# Sprites ANSI sin extensión: colorscripts/small|large regular|shiny/* (+ cualquier
-# archivo suelto en colorscripts/ o un nivel intermedio). Entran al sorteo mezclados.
-CS=("$UTILS_BASE"/colorscripts/* "$UTILS_BASE"/colorscripts/*/* "$UTILS_BASE"/colorscripts/*/*/*)
+# ASCII: resolver el nombre real del dir (ASCII/ en el repo) UNA vez.
+# (Antes había dos globs ASCII/*.txt + ascii/*.txt que con nocaseglob
+#  duplicaban el pool, y en Linux la mitad eran rutas fantasma.)
+_TXTS_DIR=""
+for _d in ASCII ascii; do
+    if [[ -d "$UTILS_BASE/$_d" ]]; then _TXTS_DIR="$UTILS_BASE/$_d"; break; fi
+done
+TXTS=()
+[[ -n "$_TXTS_DIR" ]] && TXTS=("$_TXTS_DIR"/*.txt)
+# Sprites ANSI sin extensión: colorscripts/small|large regular|shiny/*, más
+# fallback genérico a 2-3 niveles por si la estructura cambia. Entran al
+# sorteo mezclados como una sola categoría CS.
+CS=(
+    "$UTILS_BASE"/colorscripts/small/regular/*
+    "$UTILS_BASE"/colorscripts/small/shiny/*
+    "$UTILS_BASE"/colorscripts/large/regular/*
+    "$UTILS_BASE"/colorscripts/large/shiny/*
+    "$UTILS_BASE"/colorscripts/*/*/*
+    "$UTILS_BASE"/colorscripts/*/*
+)
 # Compat: estructura vieja ~/.config/fastfetch/logos/[0-9]*.png
 LEGACY=("$UTILS_BASE"/[0-9]*.png "$UTILS_BASE"/*.png "$UTILS_BASE"/*.gif)
 shopt -u nocaseglob
 # Sin kitty ni chafa no hay forma de mostrar png/gif/video
 # (saldrían como basura binaria) -> solo ASCII del pool.
+# Solución: instala chafa (tools.sh ya lo hace: sudo apt install chafa)
+# o usa kitty. Con chafa las imágenes se pre-renderizan a ANSI y SÍ salen.
 if (( ! HAS_KITTY )) && (( ! HAS_CHAFA )); then
     IMGS=(); GIFS=(); VIDS=(); LEGACY=()
+    if (( DEBUG || STATS_ONLY )); then
+        echo "[ff-random] sin kitty ni chafa: png/gif/video excluidos. Instala chafa o usa kitty." >&2
+    fi
 fi
 # Filtrar enlaces rotos / vacíos / directorios por categoría
 for arr in IMGS GIFS VIDS TXTS CS LEGACY; do
     # shellcheck disable=SC1087
     eval "TMP=(); for f in \"\${${arr}[@]}\"; do [[ -f \"\$f\" && -s \"\$f\" ]] && TMP+=(\"\$f\"); done; ${arr}=(\"\${TMP[@]}\")"
+done
+# Dedup: nocaseglob duplica ASCII/*.txt + ascii/*.txt (mismos archivos 2x) y los
+# globs CS explícitos (small|large regular|shiny) se solapan con los genéricos.
+for arr in IMGS GIFS VIDS TXTS CS LEGACY; do
+    # shellcheck disable=SC1087
+    eval "TMP=(); unset _SEEN; declare -A _SEEN=(); for f in \"\${${arr}[@]}\"; do [[ -z \"\${_SEEN[\"\$f\"]:-}\" ]] && { TMP+=(\"\$f\"); _SEEN[\"\$f\"]=1; }; done; ${arr}=(\"\${TMP[@]}\")"
 done
 # Categorías no vacías (balancea png/gif/txt/video/colorscripts en vez de
 # puro peso por cantidad: con sorteo global puro los 5000+ sprites saldrían el 84%).
@@ -168,6 +233,13 @@ CATS=()
 (( ${#CS[@]} > 0 )) && CATS+=("CS")
 (( ${#LEGACY[@]} > 0 )) && CATS+=("LEGACY")
 POOL=("${IMGS[@]}" "${GIFS[@]}" "${VIDS[@]}" "${TXTS[@]}" "${CS[@]}" "${LEGACY[@]}")
+
+# Diagnóstico: conteos por categoría (verifica que png/gif entran al sorteo)
+if (( STATS_ONLY || DEBUG )); then
+    echo "[ff-random] utils=$UTILS_BASE kitty=$HAS_KITTY chafa=$HAS_CHAFA (medida ${LOGO_W}x${LOGO_H})" >&2
+    echo "[ff-random] pool: IMGS=${#IMGS[@]} GIFS=${#GIFS[@]} VIDS=${#VIDS[@]} TXTS=${#TXTS[@]} CS=${#CS[@]} LEGACY=${#LEGACY[@]} TOTAL=${#POOL[@]}" >&2
+    if (( STATS_ONLY )); then exit 0; fi
+fi
 
 if (( ${#POOL[@]} == 0 )); then
     echo "[ff-random] Pool vacío en $UTILS_BASE, lanzo fastfetch normal" >&2
@@ -188,13 +260,23 @@ _pick_from() { # $1 = nombre de array
     fi
 }
 PICK=""
-if (( ${#CATS[@]} > 1 )); then
-    if command -v shuf >/dev/null 2>&1; then
-        CHOSEN_CAT="$(printf '%s\n' "${CATS[@]}" | shuf -n 1)"
-    else
-        CHOSEN_CAT="${CATS[$(( RANDOM % ${#CATS[@]} ))]}"
+# FF_CATEGORY fuerza una categoría (para verificar que cada tipo se ve bien):
+#   FF_CATEGORY=IMGS fastfetch | FF_CATEGORY=GIFS fastfetch | TXTS | CS | VIDS
+if [[ -n "${FF_CATEGORY:-}" ]]; then
+    case "${FF_CATEGORY^^}" in
+        IMGS|GIFS|VIDS|TXTS|CS|LEGACY) PICK="$(_pick_from "${FF_CATEGORY^^}" || true)" ;;
+        *) echo "[ff-random] FF_CATEGORY inválida: $FF_CATEGORY (IMGS|GIFS|VIDS|TXTS|CS)" >&2 ;;
+    esac
+fi
+if [[ -z "$PICK" ]]; then
+    if (( ${#CATS[@]} > 1 )); then
+        if command -v shuf >/dev/null 2>&1; then
+            CHOSEN_CAT="$(printf '%s\n' "${CATS[@]}" | shuf -n 1)"
+        else
+            CHOSEN_CAT="${CATS[$(( RANDOM % ${#CATS[@]} ))]}"
+        fi
+        PICK="$(_pick_from "$CHOSEN_CAT")"
     fi
-    PICK="$(_pick_from "$CHOSEN_CAT")"
 fi
 # Fallback: sorteo global puro
 if [[ -z "$PICK" ]]; then
@@ -234,7 +316,7 @@ case "$EXT" in
                 fi
             fi
         else
-            echo "[ff-random] ffmpeg no instalado, omito video $PICK" >&2
+            echo "[ff-random] ffmpeg no instalado, omito video $PICK (sudo apt install ffmpeg)" >&2
             IMGS=()
             for f in "${POOL[@]}"; do
                 case "${f##*.}" in [Pp][Nn][Gg]|[Jj][Pp][Gg]|[Gg][Ii][Ff]|[Tt][Xx][Tt]) IMGS+=("$f") ;; esac
@@ -254,7 +336,12 @@ case "$EXT" in
 esac
 
 # ──7. Ejecutar (command evita recursión con function fastfetch) ─
-# echo "[ff-random] $LOGO_TYPE :: $LOGO_SOURCE" >&2  # descomenta para debug
+if (( DEBUG )); then
+    echo "[ff-random] DEBUG pick=$PICK" >&2
+    echo "[ff-random] DEBUG type=$LOGO_TYPE source=$LOGO_SOURCE" >&2
+    echo "[ff-random] DEBUG config=${BASE_CONFIG:-<default>} (logo ${LOGO_W}x${LOGO_H})" >&2
+    exit 0
+fi
 if [[ -n "$BASE_CONFIG" ]]; then
     command fastfetch --config "$BASE_CONFIG" --logo-type "$LOGO_TYPE" --logo "$LOGO_SOURCE" "$@"
     exit $?

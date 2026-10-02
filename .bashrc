@@ -107,7 +107,7 @@ alias la='ls -A --color=auto'
 alias l='ls -la --color=auto'
 alias ..='cd ..'
 alias ...='cd ../..'
-alias mkdir='mkdir -p'
+alias mk='mkdir -p'
 
 # Tool aliases
 alias ff='fastfetch'
@@ -121,7 +121,7 @@ alias hist='hstr'
 alias tm='tmux'
 alias tma='tmux attach -t'
 alias tml='tmux list-sessions'
-alias fetch='fastfetch'
+
 
 # Git aliases
 alias gs='git status'

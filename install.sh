@@ -307,6 +307,14 @@ install_fastfetch() {
     #     Pregunta si ya existe y difiere (vía copy_file).
     copy_all_files "$REPO_DIR/fastfetch" "$dest_dir"
 
+    # 3.b2 Limpieza legacy: antes había 3 configs (config/config1/config2),
+    #      ahora solo queda la ÚNICA config.jsonc. Borrar las viejas si existen.
+    for legacy in "$dest_dir/config1.jsonc" "$dest_dir/config2.jsonc"; do
+        if [[ -f "$legacy" ]]; then
+            rm -f "$legacy" && log_success "Legacy eliminado: $legacy (ahora solo config.jsonc)"
+        fi
+    done
+
     # 3.c Meter utils/ dentro de la carpeta fastfetch del equipo
     #     para que fastfetch/randomizer los lea desde ahí.
     if [[ -d "$REPO_DIR/utils" ]]; then
@@ -316,6 +324,34 @@ install_fastfetch() {
         log_info "utils disponible en: $dest_dir/utils (icons/ gifs/ ASCII/ videos/)"
     else
         log_warn "No existe $REPO_DIR/utils, salto ese paso."
+    fi
+
+    # 3.d Granja utils: el config usa type kitty con UN solo source, y un glob
+    #     no combina png (utils/icons/) + gif (utils/gifs/) de dos carpetas.
+    #     Se crea logos/utils/ con symlinks a ambos (no copia, no duplica
+    #     espacio; los archivos reales viven en utils/), y el config apunta
+    #     a logos/utils/* para que `command fastfetch` rote png Y gif por kitty.
+    if [[ -d "$dest_dir/utils/icons" || -d "$dest_dir/utils/gifs" ]]; then
+        # Limpieza: la granja antes se llamaba logos/kitty/
+        [[ -d "$dest_dir/logos/kitty" ]] && rm -rf "$dest_dir/logos/kitty"
+        farm="$dest_dir/logos/utils"
+        mkdir -p "$farm" 2>/dev/null || true
+        # limpiar enlaces huérfanos de instalaciones previas
+        find "$farm" -maxdepth 1 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+        shopt -s nullglob nocaseglob
+        n=0
+        for f in "$dest_dir/utils/icons/"*.png "$dest_dir/utils/icons/"*.jpg "$dest_dir/utils/icons/"*.jpeg "$dest_dir/utils/gifs/"*.gif; do
+            [[ -f "$f" ]] || continue
+            case "$f" in
+                */icons/*) link="$farm/png-$(basename "$f")" ;;
+                *)         link="$farm/gif-$(basename "$f")" ;;
+            esac
+            if ln -sf "$f" "$link" 2>/dev/null; then ((n++)) || true; fi
+        done
+        shopt -u nullglob nocaseglob
+        log_success "Granja utils: $n enlaces en $farm (icons/png + gifs/gif vía protocolo kitty)"
+    else
+        log_warn "Sin utils/icons ni utils/gifs, salto la granja kitty."
     fi
 }
 
