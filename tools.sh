@@ -366,8 +366,21 @@ setup_starship() {
     fi
 }
 
+# Pide la clave sudo UNA sola vez al inicio y mantiene la sesión viva
+# mientras corre el instalador (si no, cada `sudo apt/pacman ...` la repide).
+ensure_sudo() {
+    command -v sudo >/dev/null 2>&1 || return 0
+    if (( EUID == 0 )); then return 0; fi
+    log_info "Se necesita sudo para instalar paquetes (una sola vez)..."
+    sudo -v || { log_error "Sin sudo no se puede continuar."; exit 1; }
+    ( while kill -0 $$ 2>/dev/null; do sudo -n true 2>/dev/null; sleep 45; done ) &
+    SUDO_ALIVE_PID=$!
+    trap 'kill "$SUDO_ALIVE_PID" 2>/dev/null || true' EXIT
+}
+
 # Main installation flow
 main() {
+    ensure_sudo
     echo "========================================"
     echo "  Terminal Utils Installer"
     echo "========================================"

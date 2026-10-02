@@ -153,6 +153,19 @@ for cfg in "$HOME/.config/fastfetch/config.jsonc" "$_SCRIPT_DIR/fastfetch/config
     if [[ -f "$cfg" ]]; then BASE_CONFIG="$cfg"; break; fi
 done
 
+# ──2b. Animación de gif solo si fastfetch la soporta (>= 2.69) ──
+# El flag --logo-animation-frame / clave animationFrame no existe en
+# versiones viejas (Debian trixie trae 2.40.4): pasarla rompería la llamada.
+# 0 = reproducir animación en kitty; sin flag el gif sale fijo (frame 1).
+FF_ANIM_ARGS=()
+_FF_VER="$(command fastfetch --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -n 1)"
+if [[ "$_FF_VER" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+    if (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] >= 69) )); then
+        FF_ANIM_ARGS=(--logo-animation-frame 0)
+    fi
+fi
+unset _FF_VER
+
 # Flags propias (se consumen aquí, no se pasan a fastfetch)
 DEBUG=0
 STATS_ONLY=0
@@ -343,9 +356,9 @@ if (( DEBUG )); then
     exit 0
 fi
 if [[ -n "$BASE_CONFIG" ]]; then
-    command fastfetch --config "$BASE_CONFIG" --logo-type "$LOGO_TYPE" --logo "$LOGO_SOURCE" "$@"
+    command fastfetch --config "$BASE_CONFIG" --logo-type "$LOGO_TYPE" --logo "$LOGO_SOURCE" "${FF_ANIM_ARGS[@]}" "$@"
     exit $?
 else
-    command fastfetch --logo-type "$LOGO_TYPE" --logo "$LOGO_SOURCE" "$@"
+    command fastfetch --logo-type "$LOGO_TYPE" --logo "$LOGO_SOURCE" "${FF_ANIM_ARGS[@]}" "$@"
     exit $?
 fi

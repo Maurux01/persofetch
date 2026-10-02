@@ -13,7 +13,12 @@
     //   fastfetch elige un archivo al azar en cada llamada directa
     //   (`command fastfetch`). El wrapper randomizer lo sobreescribe
     //   por CLI con png/gif/txt/colorscripts según sorteo y terminal.
-    // - animationFrame 0 = REPRODUCE la animación (1 = solo primer frame).
+    // - Animación (gif): existe como clave `animationFrame` solo desde
+    //   fastfetch 2.69; el de Debian trixie (2.40.4) la rechaza con
+    //   "unknown logo key" y por eso NO va en este archivo. El randomizer
+    //   la pasa por CLI (--logo-animation-frame 0 = reproducir) solo si
+    //   detecta fastfetch >= 2.69. En versiones viejas el gif sale fijo
+    //   (primer frame), que sí funciona.
     // - width/height SIEMPRE fijados: sin esto el gif sale a tamaño natural
     //   y hace scroll/corte (wiki Troubleshooting #2 y #5).
     //   Medida única del workflow: 40 cols x 20 líneas (panel ~= 21 líneas).
@@ -21,10 +26,9 @@
     // Si el gif no sale y ves el logo builtin: `fastfetch --show-errors`
     // (en Linux el tipo kitty necesita fastfetch compilado con imagemagick).
     "type": "kitty",
-    "source": "~/.config/fastfetch/logos/utils/*",
+    "source": "~/.config/fastfetch/utils/*",
     "width": 40,
     "height": 20,
-    "animationFrame": 0,
     "color": {
       "1": "green",
       "2": "bright_green"
